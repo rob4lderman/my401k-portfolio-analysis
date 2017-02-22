@@ -21,7 +21,7 @@
 
 ## <a name="Abstract"></a>Abstract
 
-Allocating your money across the various investment funds available in your 401-k 
+Allocating money across the various investment funds available in your 401-k 
 account can be challenging.  Some 401-k managers offer hundreds of funds to choose from.
 The large number of options makes it difficult to construct an optimal investment portfolio. 
 
