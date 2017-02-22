@@ -1,0 +1,608 @@
+
+
+# Optimize your 401-k
+
+* [Abstract](#Abstract)
+* [Load Libraries](#Load-Libraries)
+* [Download Fund Ticker Quotes](#Download-Fund-Ticker-Quotes)
+* [Compute Simple Returns](#Compute-Simple-Returns)
+* [Clustering](#Clustering)
+* [PCA: Visualizing Clusters](#PCA--Visualizing-Clusters)
+* [Chart Cumulative Returns](#Chart-Cumulative-Returns)
+* [Qualitative Evaluation of Clusters](#Qualitative-Evaluation-of-Clusters)
+* [Plot Selected Funds on PCA Chart](#Plot-Selected-Funds-on-PCA-Chart)
+* [Mean-Var Analysis of Selected Funds](#Mean-Var-Analysis-of-Selected-Funds)
+* [Portfolio Analysis of Selected Funds](#Portfolio-Analysis-of-Selected-Funds)
+* [Back-test Selected Portfolio](#Back-test-Selected-Portfolio)
+* [Null Funds](#Null-Funds)
+* [Include Null Funds](#Include-Null-Funds)
+* [Future](#Future)
+
+
+## <a name="Abstract"></a>Abstract
+
+Allocating your money across the various investment funds available in your 401-k 
+account can be challenging.  Some 401-k managers offer hundreds of funds to choose from.
+The large number of options makes it difficult to construct an optimal investment portfolio. 
+
+This article tackles the challenge using the following strategy:
+
+1. Reduce the number of options by sorting the funds into a set of
+"clusters" based on similarity between the funds' monthly rate-of-returns
+(i.e. funds with highly correlated monthly returns are sorted together in the same cluster).
+2. Select a single "representative fund" from each cluster.  
+3. Combine the representative funds into an optimal investment portfolio.
+
+Step 1 involved using K-means clustering to cluster funds based on the 
+past 5 years of monthly returns.  The optimal number of clusters (10) was 
+decided using multiple cluster evaluation metrics.  The clustering
+algorithm performed well, in that funds sorted themselves together as an 
+investor might expect them to (large-cap stocks clustered together, high-yield 
+bonds clustered together, real estate funds clustered together, etc).
+
+Step 2 involved using mean-variance analysis to select an optimally
+performing fund as the "representative fund" for each cluster.  In most
+cases the representative fund was easy to choose as it dominated the 
+mean-variance analysis (the fund produced the best mean return at nearly the 
+lowest volatility).  In other cases, where no fund clearly dominated
+the cluster, the representative fund was selected by trading off return 
+and volatility (in a somewhat arbitrary manner according to my own risk appetite).
+
+Step 3 involved using standard mean-variance portfolio analysis to determine
+an optimal allocation strategy across the representative funds.
+
+Note that this strategy generalizes to any set of assets, not just 401-k mutual funds.
+
+**Caveat emptor**: It goes without saying that correlation does not equal causation,
+that past results do not guarantee future performance.  This article does not constitute 
+investment advice.  Trade at your own risk.
+
+
+## <a name="Load-Libraries"></a>Load Libraries
+
+```{r}
+    
+    library(tseries)                # get.hist.quote
+    library(zoo)                    # coredata
+    library(quadprog)               # solve.QP
+    library(PerformanceAnalytics)   # chart.*
+    library(dplyr)                  # mutate, arrange, filter
+
+    source("mean-var.R")
+    source("my401k-functions.R")
+    source("my401k-etl.R")
+    source("my401k-clustering.R")
+
+    options(width=150)              # R results display width
+    options(scipen=7)               # favor fixed notation over scientific notation
+
+```
+
+
+## <a name="Download-Fund-Ticker-Quotes"></a>Download Fund Ticker Quotes
+
+
+```{r}
+
+    funds.df <- My401kEtl$loadFundList()
+
+    #
+    # zoo time-series object
+    # rows: monthly quotes
+    # cols: funds
+    #
+    quotes.zoo <- My401kEtl$loadAllTickerQuotes(funds.df)
+
+    #
+    # print the number of monthly quotes for each fund
+    #
+    quote.counts <- apply( !is.na(quotes.zoo),2,sum)
+    sort(quote.counts, decreasing=T)
+
+```
+
+
+## <a name="Compute-Simple-Returns"></a>Compute Simple Returns
+
+```{r}
+
+    simple.returns.zoo <- My401k$computeSimpleReturns(quotes.zoo)
+
+    simple.returns.fees.zoo <- My401k$computeSimpleReturnsWithFees(simple.returns.zoo,
+                                                                   funds.df)
+
+    simple.returns.stats.df <- My401k$computeSimpleReturnsStats(simple.returns.zoo)
+    simple.returns.fees.stats.df <- My401k$computeSimpleReturnsStats(simple.returns.fees.zoo)
+
+    # fundsx.df <- merge(funds.df, simple.returns.stats.df, by=0, all.x=T)
+
+    #
+    # Extract the core matrix data
+    # transpose: each row is a fund, each col is a monthly return
+    #
+    simple.returns.mat <- t( coredata(simple.returns.zoo) )
+
+```
+
+
+## <a name="Clustering"></a>Clustering
+
+
+```{r}
+
+
+    #
+    # list of objects returned by kmeans()
+    # one for each number-of-clusters (4:14)
+    #
+    km.list <- My401kClustering$generateKmeansResults(simple.returns.mat, 4:14)
+
+    #
+    # Various measures to evaluate clustering results
+    # Some measures (DB, SD) suggest 9 clusters
+    # Other measures (R^2, Hartigan) suggest 11 clusters
+    # Go with 10?
+    #
+    km.eval <- My401kClustering$evaluateKmeansResults(km.list, simple.returns.mat)
+    data.frame(km.eval)
+
+    km <- km.list[[7]]      # 10 clusters
+
+```
+
+## <a name="PCA--Visualizing-Clusters"></a>PCA: Visualizing Clusters
+
+
+```{r}
+
+    pca <- prcomp(simple.returns.mat, 
+                  center = T)
+
+    #
+    # 90% of variance is explained by first 9 principal components.
+    # This also suggests using ~9 clusters, tho I can't explain why.
+    #
+    summary(pca)$importance[,1:11]
+
+    #
+    # pca$x is the projection of simple.returns.mat (centered) onto the principal components.
+    # Use the first two principal components to project the high-dimensional data onto a plane
+    # for visualization.
+    # 
+    proj.2d <- pca$x[,1:2]
+    plot(proj.2d, 
+         col=km$cluster, 
+         pch=20,
+         xlim=c(-0.3,0.2), 
+         ylim=c(-0.12,0.35))
+    title("Projection of monthly return data\non first 2 PC's")
+
+    #
+    # legend: cluster id (# of funds in cluster)
+    #
+    legend.text = sapply(1:10, function(i) { paste(toString(i), " (", toString(km$size[i]), ")", sep="") })
+    legend(x="topleft", legend=legend.text, col=1:10, pch=20)
+
+    #
+    # Include 3rd PC
+    #
+    proj.2d <- pca$x[,3:2]
+    plot(proj.2d, 
+         col=km$cluster, 
+         pch=20, 
+         xlim=c(-0.3,0.2), 
+         ylim=c(-0.12,0.35))
+    title("Projection of monthly return data\non 2nd and 3rd PC's")
+
+
+```
+
+
+## <a name="Chart-Cumulative-Returns"></a>Chart Cumulative Returns
+
+
+```{r}
+
+
+    #
+    # list of vectors of ticker symbols 
+    #
+    cluster.tickers.list <- My401kClustering$getClusterTickersList( km ) 
+
+    #
+    # list of lists of funds
+    #
+    cluster.funds.list <- My401kClustering$getClusterFundsList( cluster.tickers.list, funds.df) 
+
+
+    My401k$chartCumulativeReturns( simple.returns.fees.zoo,
+                                   simple.returns.fees.stats.df,
+                                   cluster.tickers.list,
+                                   cluster.funds.list )
+
+
+```
+
+## <a name="Qualitative-Evaluation-of-Clusters"></a>Qualitative Evaluation of Clusters
+
+
+* Cluster 1 
+    * 20/20 foreign stock investments
+    * Primarily large cap, Japan, Europe
+    * A handful of small/mid cap, emerging markets, and real estate
+    * Selected fund: FISMX: FID INTL SMALL CAP
+        * Dominates mean-var
+        * even after accounting for highest fees in the group
+* Cluster 2
+    * 6/6 foreign stock investments
+    * Primarily emerging markets
+    * Selected fund: FHKCX: FID CHINA REGION
+        * Highest mean, also highest variance
+* Cluster 3
+    * 3/3 Real Estate funds
+    * 2 domestic, 1 global
+    * Selected fund: FRESX: FID REAL ESTATE INVS
+        * mid-point on both mean and var
+* Cluster 4
+    * 36/39 bond funds, 2 blended funds, 1 real estate
+    * Mostly intermediate-term govt bonds
+    * low volatility
+    * selected fund: VWIAX: VANG WELLESLEY ADM
+        * blended fund
+    * FRIFX: FID REAL ESTATE INC - out of place?
+    * PFORX: PIM FOR BD USHG I - bond fund, more representative of the cluster
+* Cluster 5
+    * 15/15 small and mid-cap domestic stock funds
+    * selected fund: VSEQX: VANG STRATEGIC EQ
+        * dominates mean-var
+        * with relatively low fees
+* Cluster 6
+    * 6/6 long-term domestic bonds
+    * selected fund: VWETX   VANG LT INV GR ADM
+        * dominates mean-var
+* Cluster 7
+    * 19 high-yield bonds, emerging markets, commodities, and aggressive blends
+    * selected fund: FAGIX FID CAPITAL & INCOME
+        * dominates mean-var
+* Cluster 8
+    * IBM only
+* Cluster 9
+    * 45 mostly large-cap stocks
+    * selected fund: VGIAX: VANG GRTH & INC ADM
+        * 1/6 reduction in variance for only 1/13 reduction in return
+* Cluster 10
+    * 15 mostly large-cap stocks
+    * similar to cluster 9
+    * selected fund:  RGAGX AF GRTH FUND AMER R6
+        * 1/4 reduction in variance for only 1/13 reduction in return
+
+
+## <a name="Plot-Selected-Funds-on-PCA-Chart"></a>Plot Selected Funds on PCA Chart
+
+```{r}
+
+    selected.funds.vec <- c( "FISMX",
+                             "FHKCX",
+                             "FRESX",
+                             "VWIAX",
+                             "FRIFX",
+                             "PFORX",
+                             "VSEQX",
+                             "VWETX",
+                             "FAGIX",
+                             "VGIAX",
+                             "RGAGX")
+
+    #
+    # Highlight selected funds on PCA chart
+    #
+    proj.2d <- pca$x[,1:2]
+    plot(proj.2d, 
+         col=km$cluster, 
+         pch=20,
+         xlim=c(-0.3,0.2), 
+         ylim=c(-0.12,0.35))
+    title("Projection of monthly return data\non first 2 PC's")
+
+    #
+    # legend: cluster id (# of funds in cluster)
+    #
+    legend.text = sapply(1:10, function(i) { paste(toString(i), " (", toString(km$size[i]), ")", sep="") })
+    legend(x="topleft", legend=legend.text, col=1:10, pch=20)
+
+    #
+    # label selected funds
+    #
+    proj.2d.selected.funds <- proj.2d[ selected.funds.vec, ]
+    text(x=proj.2d.selected.funds[,1],
+         y=proj.2d.selected.funds[,2],
+         labels=selected.funds.vec,
+         pos=4,
+         cex=0.75)
+
+    #
+    # Include 3rd PC
+    #
+    proj.2d <- pca$x[,3:2]
+    plot(proj.2d, 
+         col=km$cluster, 
+         pch=20, 
+         xlim=c(-0.3,0.2), 
+         ylim=c(-0.12,0.35))
+    title("Projection of monthly return data\non 2nd and 3rd PC's")
+
+    #
+    # label selected funds
+    #
+    proj.2d.selected.funds <- proj.2d[ selected.funds.vec, ]
+    text(x=proj.2d.selected.funds[,1],
+         y=proj.2d.selected.funds[,2],
+         labels=selected.funds.vec,
+         pos=4,
+         cex=0.75)
+
+    #
+    # Remove FRIFX and VWIAX (not representative of cluster 4)
+    #
+    selected.funds.vec <- c( "FISMX",
+                             "FHKCX",
+                             "FRESX",
+                             "PFORX",
+                             "VSEQX",
+                             "VWETX",
+                             "FAGIX",
+                             "VGIAX",
+                             "RGAGX")
+
+
+```
+
+
+## <a name="Mean-Var-Analysis-of-Selected-Funds"></a>Mean-Var Analysis of Selected Funds
+
+
+```{r}
+
+    #
+    # Filter selected funds from the returns data
+    #
+    selected.returns.zoo <- simple.returns.fees.zoo[, selected.funds.vec]
+    selected.returns.stats.df <- simple.returns.fees.stats.df[ selected.funds.vec, ]
+    selected.funds.df <- funds.df[ selected.funds.vec, ]
+
+    My401k$generateReturnsCharts( selected.returns.zoo,
+                                  selected.returns.stats.df,
+                                  selected.funds.df )
+                                   
+```
+
+## <a name="Portfolio-Analysis-of-Selected-Funds"></a>Portfolio Analysis of Selected Funds
+
+
+Note: current risk-free rate (US10YR=2.45%, mid-Feb 2017) found
+[here](https://www.treasury.gov/resource-center/data-chart-center/interest-rates/Pages/TextView.aspx?data=yield).
+
+
+```{r}
+
+    #
+    # build the efficient frontier (no shorting!).
+    # First calc the GMV portfolio.
+    # Then generate EFF portfolios from the GMV mean/var to max(asset-mean)
+    #
+    portfolio <- MeanVar$initPortfolio(asset.vec=as.character(selected.returns.stats.df$ticker),
+                                       mu.vec=selected.returns.stats.df$mean,
+                                       stdev.vec=selected.returns.stats.df$sd,
+                                       Sigma.mat=coredata( cov( selected.returns.zoo )),
+                                       tan.rf.rate=(2.45^(1/12) - 1)/100 )      # monthly rate assuming monthly compounding
+
+    portfolio <- MeanVar$buildPortfolio.noShort( portfolio )
+    portfolio
+
+    #
+    # Generate the mean-var plot
+    #
+    MeanVar$plotPortfolio( portfolio )
+
+    #
+    # Plot and list asset weights
+    #
+    MeanVar$plotEffAssetWeights( portfolio, main="Asset weights of efficient portfolios" )
+    MeanVar$printEffPortfolios( portfolio )
+
+
+
+```
+
+## <a name="Back-test-Selected-Portfolio"></a>Back-test Selected Portfolio
+
+
+```{r}
+
+    #
+    # selected efficient portfolio #10
+    #
+    portfolio$w.vec <- portfolio$eff.w.mat[,10]
+
+    #
+    # Generate monthly portfolio returns.
+    # 
+    # selected.returns.zoo contains the asset returns.
+    # portfolio$w.vec contains the asset weights.
+    #  (n x k) * (k x 1) -> (n x 1)
+    # dot each row (row=monthly return, column=asset)
+    # with the weight vector
+    # to get the portfolio's monthly returns
+    #
+    port.returns.zoo <- zoo( selected.returns.zoo %*% portfolio$w.vec,
+                             order.by=index(selected.returns.zoo))
+    colnames(port.returns.zoo) <- c("PORT")
+
+    #
+    # Merge portfolio returns with individual asset returns 
+    #
+    port.returns.zoo <- merge(selected.returns.zoo, port.returns.zoo)
+    port.returns.stats.df <- My401k$computeSimpleReturnsStats( port.returns.zoo )   # dup effort here but oh well
+
+    #
+    # Plot cum returns and mean var of the portfolio + individual assets
+    #
+    My401k$plotCumReturnsAndMeanVar( port.returns.zoo,
+                                     port.returns.stats.df,
+                                     lty=c(rep(1,ncol(selected.returns.zoo)), 2) )
+
+    #
+    # Plot histogram of just port returns
+    #
+    hist(port.returns.zoo$PORT, 
+         breaks=20,
+         col="lightblue")
+
+```
+
+## <a name="Null-Funds"></a>Null Funds
+
+```{r}
+
+    #
+    # 4 funds always have 0 allocation
+    # I want to include them anyway, for diversification
+    # How to do?
+    # Steal equal % from all other allocations
+    # divvy among the 4 - but how? mean-var analysis on just the 4?
+    #
+    # 
+    null.funds.vec <- c("FISMX", "FHKCX", "FRESX", "FAGIX")
+
+    #
+    # Filter selected funds from the returns data
+    #
+    null.returns.zoo <- simple.returns.fees.zoo[, null.funds.vec]
+    null.returns.stats.df <- simple.returns.fees.stats.df[ null.funds.vec, ]
+    null.funds.df <- funds.df[ null.funds.vec, ]
+
+    My401k$generateReturnsCharts( null.returns.zoo,
+                                  null.returns.stats.df,
+                                  null.funds.df )
+
+    #
+    # build the efficient frontier (no shorting!).
+    #
+    null.portfolio <- MeanVar$initPortfolio(asset.vec=as.character(null.returns.stats.df$ticker),
+                                            mu.vec=null.returns.stats.df$mean,
+                                            stdev.vec=null.returns.stats.df$sd,
+                                            Sigma.mat=coredata( cov( null.returns.zoo )),
+                                            tan.rf.rate=(2.45^(1/12) - 1)/100 ) 
+
+    null.portfolio <- MeanVar$buildPortfolio.noShort( null.portfolio )
+    null.portfolio
+
+    #
+    # Generate the mean-var plot
+    #
+    MeanVar$plotPortfolio( null.portfolio )
+
+    #
+    # Plot and list asset weights
+    #
+    MeanVar$plotEffAssetWeights( null.portfolio, main="Asset weights of efficient portfolios" )
+    MeanVar$printEffPortfolios( null.portfolio )
+
+
+```
+
+## <a name="Include-Null-Funds"></a>Include Null Funds
+
+```{r}
+
+    #
+    # Select "null portfolio" #10
+    #
+    portfolio$w.vec <- portfolio$eff.w.mat[,10]
+    null.portfolio$w.vec <- null.portfolio$eff.w.mat[,10]
+
+    #
+    # Construct various combinations of optimal portfolio and null portfolio:
+    #   100% optimal, 0% null
+    #   90% optimal, 10% null
+    #   80% optimal, 20% null
+    #   70% optimal, 30% null
+    #   60% optimal, 40% null
+    #   50% optimal, 50% null
+    #
+    w0.vec <- portfolio$w.vec
+
+    w10.vec <- portfolio$w.vec * 0.9
+    w10.vec[ names(null.portfolio$w.vec) ] <- null.portfolio$w.vec * 0.1
+
+    w20.vec <- portfolio$w.vec * 0.8
+    w20.vec[ names(null.portfolio$w.vec) ] <- null.portfolio$w.vec * 0.2
+
+    w30.vec <- portfolio$w.vec * 0.7
+    w30.vec[ names(null.portfolio$w.vec) ] <- null.portfolio$w.vec * 0.3
+
+    w40.vec <- portfolio$w.vec * 0.6
+    w40.vec[ names(null.portfolio$w.vec) ] <- null.portfolio$w.vec * 0.4
+
+    w50.vec <- portfolio$w.vec * 0.5
+    w50.vec[ names(null.portfolio$w.vec) ] <- null.portfolio$w.vec * 0.5
+
+    w.df <- data.frame(PORT=w0.vec,
+                       PORT10=w10.vec,
+                       PORT20=w20.vec,
+                       PORT30=w30.vec,
+                       PORT40=w40.vec,
+                       PORT50=w50.vec)
+
+    colSums(w.df)   # sanity check - all cols should sum to 1
+
+    #
+    # Generate monthly portfolio returns.
+    # 
+    # selected.returns.zoo contains the asset returns (row=monthly return, column=asset)
+    # w.df contains the asset weights (row=asset, column=port weights)
+    #   (n x k) * (k x 5) -> (n x 5)    (row=monthly return, column=port
+    # dot the fund monthly returns in each row in selected.returns.zoo
+    # with the fund weights in each column of w.df
+    # to get each portfolio's monthly returns
+    #
+    port.returns.zoo <- zoo( selected.returns.zoo %*% data.matrix(w.df),
+                             order.by=index(selected.returns.zoo))
+
+    #
+    # Merge portfolio returns with individual asset returns 
+    #
+    port.returns.zoo <- merge(selected.returns.zoo, port.returns.zoo)
+    port.returns.stats.df <- My401k$computeSimpleReturnsStats( port.returns.zoo )   # dup effort here but oh well
+
+    #
+    # Plot cum returns and mean var of the portfolio + individual assets
+    #
+    My401k$plotCumReturnsAndMeanVar( port.returns.zoo,
+                                     port.returns.stats.df,
+                                     lty=c(rep(1,ncol(selected.returns.zoo)), 
+                                           rep(2,ncol(w.df)) ))
+
+```
+
+You can see why the "null.portfolio" funds were kept out of the optimal portfolio.
+Adding them in not only pushes down the mean return, it also pushes up the volatility.
+Nevertheless, there are good reasons why we should include them anyway:
+
+1. Diversification!
+2. Past returns don't necessarily predict future performance.
+
+Better to be diversified than to bet all your money that the next 5 years will 
+be just like the last 5 years.
+
+
+
+
+## <a name="Future"></a>Future
+
+* mean-cVaR analysis
+
+    
+
+
+
