@@ -206,8 +206,8 @@ hr {
 <ul>
 <li><a href="#Abstract">Abstract</a></li>
 <li><a href="#Load-Libraries">Load Libraries</a></li>
-<li><a href="#Download-Fund-Ticker-Quotes">Download Fund Ticker Quotes</a></li>
-<li><a href="#Compute-Simple-Returns">Compute Simple Returns</a></li>
+<li><a href="#Download-Fund-Ticker-Quotes">Download Monthly Quotes</a></li>
+<li><a href="#Compute-Simple-Returns">Compute Monthly Returns</a></li>
 <li><a href="#Clustering">Clustering</a></li>
 <li><a href="#PCA--Visualizing-Clusters">PCA: Visualizing Clusters</a></li>
 <li><a href="#Chart-Cumulative-Returns">Chart Cumulative Returns</a></li>
@@ -278,7 +278,7 @@ investment advice.  Trade at your own risk.</p>
     options(scipen=7)               # favor fixed notation over scientific notation
 </code></pre>
 
-<h2><a name="Download-Fund-Ticker-Quotes"></a>Download Fund Ticker Quotes</h2>
+<h2><a name="Download-Fund-Ticker-Quotes"></a>Download Monthly Quotes</h2>
 
 <pre><code class="r">    funds.df &lt;- My401kEtl$loadFundList()
 
@@ -328,7 +328,7 @@ investment advice.  Trade at your own risk.</p>
 ##    93    93    93    93    93    93    91    91    91    91    91    91    91    91    91    91    91    68    65
 </code></pre>
 
-<h2><a name="Compute-Simple-Returns"></a>Compute Simple Returns</h2>
+<h2><a name="Compute-Simple-Returns"></a>Compute Monthly Returns</h2>
 
 <pre><code class="r">    simple.returns.zoo &lt;- My401k$computeSimpleReturns(quotes.zoo)
 
@@ -939,7 +939,7 @@ investment advice.  Trade at your own risk.</p>
 ## [1] 0.0007753282
 ## 
 ## $gmv.w.vec
-## [1] -1.734723e-18  6.955017e-19 -5.262212e-18  8.979525e-01  9.511318e-18 -9.111112e-18  7.778163e-02  4.384006e-18  2.426586e-02
+## [1]  0.000000e+00  6.955017e-19 -1.046613e-18  8.979525e-01  3.521160e-18 -9.111112e-18  7.778163e-02  7.346575e-18  2.426586e-02
 ## 
 ## $gmv.er
 ## [1] 0.004746965
@@ -949,19 +949,19 @@ investment advice.  Trade at your own risk.</p>
 ## 
 ## $eff.w.mat
 ##                [,1]          [,2]          [,3]          [,4]          [,5]          [,6]          [,7]          [,8]          [,9]         [,10]
-## FISMX  0.000000e+00 -1.047309e-17 -6.654528e-18  0.000000e+00  0.000000e+00  0.000000e+00 -9.695782e-18  6.539299e-17 -4.886209e-17 -3.702762e-17
-## FHKCX  6.955017e-19 -1.863642e-19  0.000000e+00 -1.086643e-22  0.000000e+00  0.000000e+00  3.462931e-18  5.051696e-18  6.192933e-18  6.491368e-18
-## FRESX -1.046613e-18 -6.982579e-18 -2.787196e-17 -2.168257e-17 -5.450406e-17 -3.640294e-17 -2.161989e-18  1.387779e-17  0.000000e+00  0.000000e+00
+## FISMX  0.000000e+00 -4.699429e-18 -1.033750e-17  0.000000e+00  0.000000e+00  0.000000e+00  5.549788e-17 -1.293228e-17 -3.315342e-17 -3.702762e-17
+## FHKCX  6.955017e-19  1.438786e-18  0.000000e+00  6.845862e-20  0.000000e+00  0.000000e+00  4.159552e-18  4.418537e-18  6.192933e-18  6.491368e-18
+## FRESX -1.046613e-18 -1.465608e-17 -1.433257e-17 -4.108784e-17 -2.903863e-17 -3.640294e-17  2.161989e-18  1.387779e-17  0.000000e+00  0.000000e+00
 ## PFORX  8.979525e-01  8.851320e-01  8.097817e-01  7.344315e-01  6.600374e-01  5.869396e-01  5.138418e-01  4.223915e-01  3.064529e-01  1.905144e-01
-## VSEQX  3.521160e-18  3.224271e-18  2.634245e-17  0.000000e+00  5.804957e-03  1.947925e-02  3.315354e-02  4.561830e-02  5.646916e-02  6.732002e-02
+## VSEQX  3.521160e-18  1.434802e-17  1.343618e-17  0.000000e+00  5.804957e-03  1.947925e-02  3.315354e-02  4.561830e-02  5.646916e-02  6.732002e-02
 ## VWETX -9.111112e-18 -2.496634e-17 -4.092583e-17 -5.688531e-17 -7.276798e-17 -8.854652e-17  0.000000e+00  1.876951e-02  6.258365e-02  1.063978e-01
-## FAGIX  7.778163e-02 -1.734723e-18  2.400747e-19 -1.541465e-16 -2.895090e-17 -2.522547e-16 -1.000703e-16 -5.693218e-17 -9.782366e-16 -1.093913e-15
+## FAGIX  7.778163e-02  0.000000e+00  1.660251e-17 -2.280651e-17 -2.033523e-16 -2.522547e-16 -4.122127e-17 -1.058200e-16 -9.782366e-16 -1.093913e-15
 ## VGIAX  7.346575e-18  3.374316e-03  7.909736e-02  1.548204e-01  2.260578e-01  2.912145e-01  3.563711e-01  4.244874e-01  4.965529e-01  5.686185e-01
 ## RGAGX  2.426586e-02  1.114937e-01  1.111209e-01  1.107481e-01  1.080998e-01  1.023667e-01  9.663360e-02  8.873333e-02  7.794134e-02  6.714936e-02
 ##              [,11]         [,12]        [,13]         [,14]         [,15]
 ## FISMX 6.764422e-17  7.458132e-17 1.375493e-16  1.450062e-16  9.558776e-17
 ## FHKCX 2.319199e-18 -2.595647e-17 1.574942e-19 -1.484113e-18 -1.905397e-18
-## FRESX 0.000000e+00 -1.387779e-17 0.000000e+00  0.000000e+00 -4.443298e-18
+## FRESX 0.000000e+00 -1.387779e-17 0.000000e+00  0.000000e+00 -2.962199e-18
 ## PFORX 7.457584e-02  3.068255e-18 1.866644e-18  6.650335e-19  4.004668e-18
 ## VSEQX 7.817088e-02  1.019167e-01 1.489119e-01  1.959071e-01  5.610612e-01
 ## VWETX 1.502119e-01  1.534837e-01 8.365889e-02  1.383403e-02  1.266060e-17

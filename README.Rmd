@@ -4,8 +4,8 @@
 
 * [Abstract](#Abstract)
 * [Load Libraries](#Load-Libraries)
-* [Download Fund Ticker Quotes](#Download-Fund-Ticker-Quotes)
-* [Compute Simple Returns](#Compute-Simple-Returns)
+* [Download Monthly Quotes](#Download-Fund-Ticker-Quotes)
+* [Compute Monthly Returns](#Compute-Simple-Returns)
 * [Clustering](#Clustering)
 * [PCA: Visualizing Clusters](#PCA--Visualizing-Clusters)
 * [Chart Cumulative Returns](#Chart-Cumulative-Returns)
@@ -79,7 +79,7 @@ investment advice.  Trade at your own risk.
 ```
 
 
-## <a name="Download-Fund-Ticker-Quotes"></a>Download Fund Ticker Quotes
+## <a name="Download-Fund-Ticker-Quotes"></a>Download Monthly Quotes
 
 
 ```{r}
@@ -102,7 +102,7 @@ investment advice.  Trade at your own risk.
 ```
 
 
-## <a name="Compute-Simple-Returns"></a>Compute Simple Returns
+## <a name="Compute-Simple-Returns"></a>Compute Monthly Returns
 
 ```{r}
 
